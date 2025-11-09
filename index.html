@@ -54,7 +54,7 @@ OPTIONAL CLOUD SYNC (Supabase REST):
     <div class="controls">
       <button id="newPlan" class="btn">Generate New Plan</button>
       <button id="addItem" class="btn">Add Item</button>
-      <button id="syncBtn" class="btn" title="Sync now">Sync</button>
+      <button id="syncBtn" class="btn" title="Sync now">Sync <span id="syncStatus" style="font-size:1.4rem; margin-left:6px; display:inline-block; opacity:0; transition: opacity 0.4s ease;">●</span></button>
     </div>
     <div id="mealContainer"></div>
   </main>
@@ -200,19 +200,13 @@ OPTIONAL CLOUD SYNC (Supabase REST):
 
     document.getElementById('syncBtn').onclick=async ()=>{
       const res = await syncCustomDinners();
-      alert(res.remote ? 'Cloud synced' : 'Using local only');
+      const ss=document.getElementById('syncStatus'); ss.style.opacity=0; setTimeout(()=>{ ss.textContent = res.remote ? '●' : '○'; ss.style.opacity=1; },10);
     };
 
     // On load, try a background sync then render
     (async function init(){
       const res = await syncCustomDinners();
-      if (res.remote) {
-        console.log('✅ Supabase connection OK');
-        alert('✅ Supabase connection confirmed');
-      } else {
-        console.warn('⚠️ Supabase connection failed, using local data');
-        alert('⚠️ Could not reach Supabase — check table + RLS settings');
-      }
+      const ss=document.getElementById('syncStatus'); ss.style.opacity=0; setTimeout(()=>{ ss.textContent = res.remote ? '●' : '○'; ss.style.opacity=1; },10);
       loadPlan();
     })();
   </script>
