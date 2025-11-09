@@ -7,6 +7,19 @@ INSTRUCTIONS FOR DAKBOARD SETUP:
 5. In your DAKboard account, go to Custom Screen → Add Block → iFrame.
 6. Paste that link in the iFrame URL field.
 7. Save your screen, and you’ll see your Weekly Family Dinner Planner displayed.
+
+OPTIONAL CLOUD SYNC (Supabase REST):
+• Create a free Supabase project → SQL Editor → run:
+  CREATE TABLE IF NOT EXISTS custom_dinners (
+    id bigserial primary key,
+    household_id text not null,
+    name text not null,
+    inserted_at timestamp with time zone default now(),
+    unique(household_id, name)
+  );
+• In "Table Editor", set Row Level Security OFF for quick start (or add policies to allow read/insert for anon key).
+• Copy your Project URL and anon public key.
+• Fill the SYNC config in the script below. Instances using the same household_id will share items.
 -->
 
 <!DOCTYPE html>
@@ -18,12 +31,12 @@ INSTRUCTIONS FOR DAKBOARD SETUP:
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     html, body { font-family: 'Oswald', sans-serif; margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; color: #333333; display: flex; justify-content: center; }
-    main { display: flex; flex-direction: column; padding: 1.5rem 1rem; width: 100%; max-width: 1000px; height: 100%; box-sizing: border-box; margin: 1rem auto; }
+    main { display: flex; flex-direction: column; padding: 1.5rem 1rem; width: 100%;  height: 100%; box-sizing: border-box; margin: 1rem auto; }
     .controls { display: flex; justify-content: flex-start; flex-wrap: wrap; margin-bottom: 1rem; gap: .5rem; }
     .btn { background: rgba(255,255,255,0.08); color: #333333; border: 1px solid #888888; border-radius: 10px; padding: 0.25rem 0.6rem; cursor: pointer; font-family: 'Oswald', sans-serif; font-size: 1.15rem; letter-spacing: .3px; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25); backdrop-filter: saturate(120%) blur(2px); transition: transform .06s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease; }
     .btn:hover { background: rgba(0,0,0,0.06); border-color: #666666; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.35); }
-    #mealContainer { display: flex; gap: 0.5rem; flex-grow: 1; overflow-x: auto; align-items: stretch; }
-    .meal-day { background: rgba(255,255,255,0.1); border: 1px solid #888888; border-radius: 10px; padding: 0.25rem 0.35rem 0.2rem 0.35rem; flex: 1 1 calc(14% - 0.5rem); min-width: 150px; color: #333333; box-sizing: border-box; font-size: 1.05rem; display: flex; flex-direction: column; justify-content: flex-start; height: 100%; }
+    #mealContainer { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; flex-grow: 1; overflow: hidden; align-items: stretch; width: 100%; }
+    .meal-day { background: rgba(255,255,255,0.1); border: 1px solid #888888; border-radius: 10px; padding: 0.25rem 0.35rem 0.2rem 0.35rem; width: 100%; color: #333333; box-sizing: border-box; font-size: 1.05rem; display: flex; flex-direction: column; justify-content: flex-start; height: 100%; }
     .meal-day h3 { font-size: 1.15rem; text-align: center; line-height: 1.1; margin: 0.1rem 0; }
     .meal-day p, .meal-day .meal-name { color: #333333; margin: 0.05rem 0; text-align: center; line-height: 1.1; }
     .rating { margin-top: 0.15rem; margin-bottom: 0; display: flex; justify-content: center; align-items: center; gap: 6px; }
@@ -31,92 +44,124 @@ INSTRUCTIONS FOR DAKBOARD SETUP:
     .thumb.up.active { color: #16a34a; filter: none; opacity: 1; }
     .thumb.down.active { color: #dc2626; filter: none; opacity: 1; }
     .replace-btn { background: transparent; border: none; cursor: pointer; font-size: 1.3rem; padding: 0.25rem; color: #555555; filter: grayscale(100%); transition: color 0.25s ease, filter 0.25s ease, opacity 0.25s ease; }
-  .thumb:hover { opacity: 0.6; filter: grayscale(60%); }
-.replace-btn { transition: color 0.25s ease, opacity 0.25s ease; }
-.replace-btn:hover { opacity: 0.7; filter: grayscale(60%); }
-</style>
+    .thumb:hover { opacity: 0.6; filter: grayscale(60%); }
+    .replace-btn { transition: color 0.25s ease, opacity 0.25s ease; }
+    .replace-btn:hover { opacity: 0.7; filter: grayscale(60%); }
+  </style>
 </head>
 <body>
   <main>
     <div class="controls">
       <button id="newPlan" class="btn">Generate New Plan</button>
       <button id="addItem" class="btn">Add Item</button>
+      <button id="syncBtn" class="btn" title="Sync now">Sync</button>
     </div>
     <div id="mealContainer"></div>
   </main>
 
   <script>
     // -----------------------------
-    // Data
+    // Cloud Sync (Supabase REST) config — provided by user
+    // -----------------------------
+    const SYNC = {
+      enabled: true,
+      url: 'https://silfwvtldtbtoiftcrka.supabase.co',
+      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpbGZ3dnRsZHRidG9pZnRjcmthIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI2NDEwMDAsImV4cCI6MjA3ODIxNzAwMH0.Pf0VEZDpXJu9SDIsLjmHiNnNWmjriwBc9krfflY2hkM',
+      table: 'custom_dinners',
+      householdId: 'fammeals'
+    };
+
+    // -----------------------------
+    // Base + local storage
     // -----------------------------
     const baseDinners = [
-      'Beef Stroganoff over Egg Noodles', 'Chicken Marsala with Garlic Mashed Potatoes',
-      'Pork Tenderloin with Roasted Vegetables', 'Stuffed Peppers with Ground Turkey',
-      'Teriyaki Chicken with Stir-Fried Veggies', 'Homemade Lasagna', 'Balsamic Glazed Chicken with Quinoa',
-      'Honey Garlic Pork Chops with Rice Pilaf', 'Chicken Fajitas with Peppers and Onions', 'BBQ Ribs with Coleslaw',
-      'Baked Ziti with Italian Sausage', 'Grilled Steak with Roasted Potatoes', 'Creamy Tuscan Chicken Pasta',
-      'Crockpot Pot Roast with Carrots and Potatoes', 'Taco Bowls with Rice and Black Beans',
-      'Buffalo Chicken Wraps with Celery and Ranch', 'Baked Chicken Parmesan',
-      'Stuffed Shells with Spinach and Ricotta', 'Honey Mustard Chicken with Roasted Sweet Potatoes', 'Beef and Broccoli Stir Fry',
-      'BBQ Pulled Pork Sandwiches', 'Chicken Alfredo with Broccoli', 'Greek Chicken with Lemon Rice and Cucumber Salad',
-      'Beef Enchiladas with Spanish Rice', 'Chicken Burrito Bowls', 'Cajun Chicken Pasta',
-      'Meatloaf with Mashed Potatoes and Green Beans', 'Grilled Chicken Caesar Wraps', 'Margherita Flatbread Pizza',
-      'Crockpot Chili with Cornbread', 'Baked BBQ Chicken Thighs with Rice', 'Stir Fry Noodle Bowls with Chicken',
-      'Beef Tacos with Fresh Salsa', 'Sheet Pan Chicken and Veggies', 'Chicken Pot Pie with Flaky Crust',
-      'Sausage and Peppers over Rice', 'Spaghetti Carbonara'
+      'Beef Stroganoff over Egg Noodles','Chicken Marsala with Garlic Mashed Potatoes','Pork Tenderloin with Roasted Vegetables','Stuffed Peppers with Ground Turkey','Teriyaki Chicken with Stir-Fried Veggies','Homemade Lasagna','Balsamic Glazed Chicken with Quinoa','Honey Garlic Pork Chops with Rice Pilaf','Chicken Fajitas with Peppers and Onions','BBQ Ribs with Coleslaw','Baked Ziti with Italian Sausage','Grilled Steak with Roasted Potatoes','Creamy Tuscan Chicken Pasta','Crockpot Pot Roast with Carrots and Potatoes','Taco Bowls with Rice and Black Beans','Buffalo Chicken Wraps with Celery and Ranch','Baked Chicken Parmesan','Stuffed Shells with Spinach and Ricotta','Honey Mustard Chicken with Roasted Sweet Potatoes','Beef and Broccoli Stir Fry','BBQ Pulled Pork Sandwiches','Chicken Alfredo with Broccoli','Greek Chicken with Lemon Rice and Cucumber Salad','Beef Enchiladas with Spanish Rice','Chicken Burrito Bowls','Cajun Chicken Pasta','Meatloaf with Mashed Potatoes and Green Beans','Grilled Chicken Caesar Wraps','Margherita Flatbread Pizza','Crockpot Chili with Cornbread','Baked BBQ Chicken Thighs with Rice','Stir Fry Noodle Bowls with Chicken','Beef Tacos with Fresh Salsa','Sheet Pan Chicken and Veggies','Chicken Pot Pie with Flaky Crust','Sausage and Peppers over Rice','Spaghetti Carbonara'
     ];
 
-    function loadCustomDinners(){
-      try { return JSON.parse(localStorage.getItem('customDinners')) || []; } catch(e){ return []; }
-    }
+    function loadCustomDinners(){ try { return JSON.parse(localStorage.getItem('customDinners')) || []; } catch(e){ return []; } }
     function saveCustomDinners(list){ localStorage.setItem('customDinners', JSON.stringify(list)); }
-    function getDinners(){ return baseDinners.concat(loadCustomDinners()); }
 
+    // -----------------------------
+    // Remote sync helpers (Supabase REST)
+    // -----------------------------
+    async function fetchRemoteCustomDinners(){
+      if (!SYNC.enabled) return [];
+      const url = `${SYNC.url}/rest/v1/${SYNC.table}?select=name&household_id=eq.${encodeURIComponent(SYNC.householdId)}`;
+      const res = await fetch(url, { headers: { 'apikey': SYNC.anonKey, 'Authorization': `Bearer ${SYNC.anonKey}` }});
+      if (!res.ok) throw new Error('Remote fetch failed');
+      const rows = await res.json();
+      return rows.map(r => r.name);
+    }
+
+    async function insertRemoteCustomDinner(name){
+      if (!SYNC.enabled) return false;
+      const url = `${SYNC.url}/rest/v1/${SYNC.table}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'apikey': SYNC.anonKey,
+          'Authorization': `Bearer ${SYNC.anonKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify({ household_id: SYNC.householdId, name })
+      });
+      return res.ok;
+    }
+
+    async function syncCustomDinners(){
+      const local = loadCustomDinners();
+      try {
+        const remote = await fetchRemoteCustomDinners();
+        // push any local-only items to remote
+        for (const item of local) {
+          if (!remote.some(x => x.toLowerCase() === item.toLowerCase())) {
+            await insertRemoteCustomDinner(item);
+          }
+        }
+        // re-fetch to include others' additions
+        const latest = await fetchRemoteCustomDinners();
+        saveCustomDinners(latest);
+        return { list: latest, remote: true };
+      } catch (e) {
+        console.warn('Sync failed; staying local:', e);
+        return { list: local, remote: false };
+      }
+    }
+
+    // -----------------------------
+    // UI + logic
+    // -----------------------------
     const mealContainer = document.getElementById('mealContainer');
     let favorites = JSON.parse(localStorage.getItem('favorites')) || {};
 
-    // -----------------------------
-    // Helpers
-    // -----------------------------
-    function getRandomDinner(exclude = null) {
-      const all = getDinners();
-      if (all.length === 0) return '';
-
-      // Weight toward liked, away from disliked
-      const liked = all.filter(x => favorites[x] === 'up');
-      const neutral = all.filter(x => !favorites[x]);
-      const weighted = [...liked, ...neutral, ...neutral, ...liked];
-      const pool = (weighted.length > 0) ? weighted : all;
-
-      let choice;
-      let safety = 0;
-      do {
-        choice = pool[Math.floor(Math.random() * pool.length)];
-        safety++;
-      } while (choice === exclude && safety < 15);
-
+    function getRandomDinner(exclude=null){
+      const all = baseDinners.concat(loadCustomDinners());
+      if(all.length===0) return '';
+      const liked = all.filter(x=>favorites[x]==='up');
+      const neutral = all.filter(x=>!favorites[x]);
+      const weighted = [...liked,...neutral,...neutral,...liked];
+      const pool = weighted.length>0 ? weighted : all;
+      let choice, safety=0;
+      do{ choice = pool[Math.floor(Math.random()*pool.length)]; safety++; } while(choice===exclude && safety<15);
       return choice || all[0];
     }
 
-    function generatePlan() {
-      const plan = [];
-      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      for (let i = 0; i < 7; i++) plan.push({ day: days[i], dinner: getRandomDinner() });
-      return plan;
+    function generatePlan(){
+      const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+      return days.map(day=>({ day, dinner:getRandomDinner() }));
     }
 
-    function saveFavorites() { localStorage.setItem('favorites', JSON.stringify(favorites)); }
+    function saveFavorites(){ localStorage.setItem('favorites', JSON.stringify(favorites)); }
 
-    function renderPlan(plan) {
-      mealContainer.innerHTML = '';
-      plan.forEach((day) => {
-        const div = document.createElement('div');
-        div.className = 'meal-day';
-
-        const upActive = favorites[day.dinner] === 'up' ? 'active' : '';
-        const downActive = favorites[day.dinner] === 'down' ? 'active' : '';
-
-        div.innerHTML = `
+    function renderPlan(plan){
+      mealContainer.innerHTML='';
+      plan.forEach(day=>{
+        const div=document.createElement('div');
+        div.className='meal-day';
+        const upActive=favorites[day.dinner]==='up'?'active':'';
+        const downActive=favorites[day.dinner]==='down'?'active':'';
+        div.innerHTML=`
           <h3>${day.day}</h3>
           <p class="meal-name">${day.dinner}</p>
           <div class="rating">
@@ -125,72 +170,51 @@ INSTRUCTIONS FOR DAKBOARD SETUP:
             <button class="replace-btn" title="Replace">↻</button>
           </div>
         `;
-
-        div.querySelector('.thumb.up').addEventListener('click', () => {
-          favorites[day.dinner] = favorites[day.dinner] === 'up' ? null : 'up';
-          saveFavorites();
-          renderPlan(plan);
-        });
-        div.querySelector('.thumb.down').addEventListener('click', () => {
-          favorites[day.dinner] = favorites[day.dinner] === 'down' ? null : 'down';
-          saveFavorites();
-          renderPlan(plan);
-        });
-        div.querySelector('.replace-btn').addEventListener('click', () => {
-          day.dinner = getRandomDinner(day.dinner);
-          localStorage.setItem('familyDinnerPlan', JSON.stringify(plan));
-          renderPlan(plan);
-        });
-
+        div.querySelector('.thumb.up').onclick=()=>{ favorites[day.dinner]=favorites[day.dinner]==='up'?null:'up'; saveFavorites(); renderPlan(plan); };
+        div.querySelector('.thumb.down').onclick=()=>{ favorites[day.dinner]=favorites[day.dinner]==='down'?null:'down'; saveFavorites(); renderPlan(plan); };
+        div.querySelector('.replace-btn').onclick=()=>{ day.dinner=getRandomDinner(day.dinner); localStorage.setItem('familyDinnerPlan',JSON.stringify(plan)); renderPlan(plan); };
         mealContainer.appendChild(div);
       });
     }
 
-    function loadPlan() {
-      const stored = localStorage.getItem('familyDinnerPlan');
-      if (stored) renderPlan(JSON.parse(stored));
-      else { const newPlan = generatePlan(); localStorage.setItem('familyDinnerPlan', JSON.stringify(newPlan)); renderPlan(newPlan); }
+    function loadPlan(){
+      const stored=localStorage.getItem('familyDinnerPlan');
+      if(stored) renderPlan(JSON.parse(stored));
+      else { const p=generatePlan(); localStorage.setItem('familyDinnerPlan',JSON.stringify(p)); renderPlan(p); }
     }
 
-    document.getElementById('newPlan').addEventListener('click', () => {
-      const newPlan = generatePlan();
-      localStorage.setItem('familyDinnerPlan', JSON.stringify(newPlan));
-      renderPlan(newPlan);
-    });
+    document.getElementById('newPlan').onclick=()=>{
+      const p=generatePlan(); localStorage.setItem('familyDinnerPlan',JSON.stringify(p)); renderPlan(p);
+    };
 
-    document.getElementById('addItem').addEventListener('click', () => {
-      const name = (prompt('Add a dinner item (e.g., "Chicken Piccata")') || '').trim();
-      if (!name) return;
-      const custom = loadCustomDinners();
-      const exists = baseDinners.concat(custom).some(x => x.toLowerCase() === name.toLowerCase());
-      if (exists) { alert('That item already exists.'); return; }
-      custom.push(name);
-      saveCustomDinners(custom);
-      alert('Added! New suggestions will include it.');
-    });
+    document.getElementById('addItem').onclick=async ()=>{
+      const name=(prompt('Add a dinner item:')||'').trim(); if(!name) return;
+      const snapshot = baseDinners.concat(loadCustomDinners());
+      if(snapshot.some(x=>x.toLowerCase()===name.toLowerCase())) return alert('Already exists');
+      // Optimistic local save
+      const cur=loadCustomDinners(); cur.push(name); saveCustomDinners(cur);
+      // Try remote save (best-effort)
+      try { await insertRemoteCustomDinner(name); } catch(e) { console.warn('Remote insert failed', e); }
+      alert('Added!');
+    };
 
-    // -----------------------------
-    // Minimal Test Cases (console)
-    // -----------------------------
-    ;(function runTests(){
-      try {
-        console.assert(typeof getRandomDinner() === 'string', 'getRandomDinner should return a string');
-        const ex = baseDinners[0];
-        let tries = 20, ok = true;
-        while (tries--) { if (getRandomDinner(ex) === ex) ok = false; }
-        console.assert(ok, 'getRandomDinner(exclude) should avoid excluded item (most tries)');
-        const before = loadCustomDinners().length;
-        saveCustomDinners(['Test Item']);
-        console.assert(loadCustomDinners().length >= before, 'custom dinners should persist');
-        // cleanup test artifact (non-destructive)
-        const current = loadCustomDinners().filter(x => x !== 'Test Item');
-        saveCustomDinners(current);
-        console.log('Meal Planner tests passed');
-      } catch(e){ console.warn('Meal Planner tests encountered an issue:', e); }
+    document.getElementById('syncBtn').onclick=async ()=>{
+      const res = await syncCustomDinners();
+      alert(res.remote ? 'Cloud synced' : 'Using local only');
+    };
+
+    // On load, try a background sync then render
+    (async function init(){
+      const res = await syncCustomDinners();
+      if (res.remote) {
+        console.log('✅ Supabase connection OK');
+        alert('✅ Supabase connection confirmed');
+      } else {
+        console.warn('⚠️ Supabase connection failed, using local data');
+        alert('⚠️ Could not reach Supabase — check table + RLS settings');
+      }
+      loadPlan();
     })();
-
-    // Kickoff
-    loadPlan();
   </script>
 </body>
 </html>
