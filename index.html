@@ -23,15 +23,15 @@ INSTRUCTIONS FOR DAKBOARD SETUP:
     button { background: #3b82f6; color: white; border: none; border-radius: 8px; padding: 0.5rem 1rem; cursor: pointer; font-family: 'Oswald', sans-serif; }
     button:hover { background: #2563eb; }
     #mealContainer { display: flex; gap: 0.5rem; flex-grow: 1; overflow-x: auto; }
-    .meal-day { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 1rem; flex: 1 1 calc(14% - 0.5rem); min-width: 150px; color: #333333; box-sizing: border-box; border: 1px solid #cccccc; }
-    .meal-day h3 { margin-top: 0; color: #333333; }
-    .meal-day p, .meal-day .meal-name { color: #333333; }
-    .rating { margin-top: 0.5rem; display: flex; align-items: center; gap: 8px; color: #333333; }
-    .thumb { cursor: pointer; font-size: 1.2rem; margin-right: 10px; }
+    .meal-day { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 0.5rem; flex: 1 1 calc(14% - 0.5rem); min-width: 150px; color: #333333; box-sizing: border-box; border: 1px solid #cccccc; font-size: 0.9rem; display: flex; flex-direction: column; justify-content: flex-start; }
+    .meal-day h3 { margin: 0 0 0.3rem 0; color: #333333; font-size: 1rem; text-align: center; }
+    .meal-day p, .meal-day .meal-name { color: #333333; margin: 0; text-align: center; }
+    .rating { margin-top: 0.3rem; display: flex; justify-content: center; align-items: center; gap: 6px; }
+    .thumb { cursor: pointer; font-size: 1rem; }
     .thumb.up.active { color: #16a34a; }
     .thumb.down.active { color: #dc2626; }
-    .replace-btn { background: #f97316; color: white; border: none; border-radius: 6px; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.9rem; font-family: 'Oswald', sans-serif; }
-    .replace-btn:hover { background: #ea580c; }
+    .replace-btn { background: transparent; border: none; cursor: pointer; font-size: 1.2rem; padding: 0; }
+    .replace-btn:hover { color: #f97316; }
   </style>
 </head>
 <body>
@@ -64,24 +64,18 @@ INSTRUCTIONS FOR DAKBOARD SETUP:
 
     function getRandomDinner(exclude = null) {
       let choice;
-      do {
-        choice = dinners[Math.floor(Math.random() * dinners.length)];
-      } while (choice === exclude);
+      do { choice = dinners[Math.floor(Math.random() * dinners.length)]; } while (choice === exclude);
       return choice;
     }
 
     function generatePlan() {
       const plan = [];
       const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      for (let i = 0; i < 7; i++) {
-        plan.push({ day: days[i], dinner: getRandomDinner() });
-      }
+      for (let i = 0; i < 7; i++) { plan.push({ day: days[i], dinner: getRandomDinner() }); }
       return plan;
     }
 
-    function saveFavorites() {
-      localStorage.setItem('favorites', JSON.stringify(favorites));
-    }
+    function saveFavorites() { localStorage.setItem('favorites', JSON.stringify(favorites)); }
 
     function renderPlan(plan) {
       mealContainer.innerHTML = '';
@@ -94,36 +88,17 @@ INSTRUCTIONS FOR DAKBOARD SETUP:
 
         div.innerHTML = `
           <h3>${day.day}</h3>
-          <p><strong>Dinner:</strong> <span class="meal-name">${day.dinner}</span></p>
+          <p class="meal-name">${day.dinner}</p>
           <div class="rating">
             <span class="thumb up ${upActive}">👍</span>
             <span class="thumb down ${downActive}">👎</span>
-            <button class="replace-btn">Replace 🔁</button>
+            <button class="replace-btn">🔄</button>
           </div>
         `;
 
-        const up = div.querySelector('.thumb.up');
-        const down = div.querySelector('.thumb.down');
-        const replaceBtn = div.querySelector('.replace-btn');
-
-        up.addEventListener('click', () => {
-          favorites[day.dinner] = favorites[day.dinner] === 'up' ? null : 'up';
-          saveFavorites();
-          renderPlan(plan);
-        });
-
-        down.addEventListener('click', () => {
-          favorites[day.dinner] = favorites[day.dinner] === 'down' ? null : 'down';
-          saveFavorites();
-          renderPlan(plan);
-        });
-
-        replaceBtn.addEventListener('click', () => {
-          const newDinner = getRandomDinner(day.dinner);
-          day.dinner = newDinner;
-          localStorage.setItem('familyDinnerPlan', JSON.stringify(plan));
-          renderPlan(plan);
-        });
+        div.querySelector('.thumb.up').addEventListener('click', () => { favorites[day.dinner] = favorites[day.dinner] === 'up' ? null : 'up'; saveFavorites(); renderPlan(plan); });
+        div.querySelector('.thumb.down').addEventListener('click', () => { favorites[day.dinner] = favorites[day.dinner] === 'down' ? null : 'down'; saveFavorites(); renderPlan(plan); });
+        div.querySelector('.replace-btn').addEventListener('click', () => { day.dinner = getRandomDinner(day.dinner); localStorage.setItem('familyDinnerPlan', JSON.stringify(plan)); renderPlan(plan); });
 
         mealContainer.appendChild(div);
       });
@@ -131,20 +106,11 @@ INSTRUCTIONS FOR DAKBOARD SETUP:
 
     function loadPlan() {
       const stored = localStorage.getItem('familyDinnerPlan');
-      if (stored) {
-        renderPlan(JSON.parse(stored));
-      } else {
-        const newPlan = generatePlan();
-        localStorage.setItem('familyDinnerPlan', JSON.stringify(newPlan));
-        renderPlan(newPlan);
-      }
+      if (stored) renderPlan(JSON.parse(stored));
+      else { const newPlan = generatePlan(); localStorage.setItem('familyDinnerPlan', JSON.stringify(newPlan)); renderPlan(newPlan); }
     }
 
-    document.getElementById('newPlan').addEventListener('click', () => {
-      const newPlan = generatePlan();
-      localStorage.setItem('familyDinnerPlan', JSON.stringify(newPlan));
-      renderPlan(newPlan);
-    });
+    document.getElementById('newPlan').addEventListener('click', () => { const newPlan = generatePlan(); localStorage.setItem('familyDinnerPlan', JSON.stringify(newPlan)); renderPlan(newPlan); });
 
     loadPlan();
   </script>
