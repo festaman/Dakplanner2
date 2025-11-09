@@ -1,0 +1,154 @@
+<!--
+INSTRUCTIONS FOR DAKBOARD SETUP:
+1. Download this HTML file to your computer.
+2. Go to https://app.netlify.com/drop (a free hosting tool).
+3. Drag and drop this HTML file into Netlify Drop. It will give you a secure HTTPS link.
+4. Copy that link.
+5. In your DAKboard account, go to Custom Screen → Add Block → iFrame.
+6. Paste that link in the iFrame URL field.
+7. Save your screen, and you’ll see your Weekly Family Dinner Planner displayed.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Family Dinner Planner</title>
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    html, body { font-family: 'Oswald', sans-serif; margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; color: white; }
+    header { background: transparent; color: white; padding: 1rem; text-align: center; font-size: 1.5rem; }
+    main { display: flex; flex-direction: column; padding: 1rem; width: 100%; height: 100%; box-sizing: border-box; }
+    .controls { display: flex; justify-content: flex-start; flex-wrap: wrap; margin-bottom: 1rem; }
+    button { background: #3b82f6; color: white; border: none; border-radius: 8px; padding: 0.5rem 1rem; cursor: pointer; font-family: 'Oswald', sans-serif; }
+    button:hover { background: #2563eb; }
+    #mealContainer { display: flex; gap: 0.5rem; flex-grow: 1; overflow-x: auto; }
+    .meal-day { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 1rem; flex: 1 1 calc(14% - 0.5rem); min-width: 150px; color: white; box-sizing: border-box; }
+    .meal-day h3 { margin-top: 0; color: white; }
+    .meal-day p, .meal-day .meal-name { color: white; }
+    .rating { margin-top: 0.5rem; display: flex; align-items: center; gap: 8px; color: white; }
+    .thumb { cursor: pointer; font-size: 1.2rem; margin-right: 10px; }
+    .thumb.up.active { color: #16a34a; }
+    .thumb.down.active { color: #dc2626; }
+    .replace-btn { background: #f97316; color: white; border: none; border-radius: 6px; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.9rem; font-family: 'Oswald', sans-serif; }
+    .replace-btn:hover { background: #ea580c; }
+  </style>
+</head>
+<body>
+  <header>Weekly Family Dinner Planner</header>
+  <main>
+    <div class="controls">
+      <button id="newPlan">Generate New Plan</button>
+    </div>
+    <div id="mealContainer"></div>
+  </main>
+  <script>
+    const dinners = [
+      'Beef Stroganoff over Egg Noodles', 'Chicken Marsala with Garlic Mashed Potatoes',
+      'Pork Tenderloin with Roasted Vegetables', 'Stuffed Peppers with Ground Turkey',
+      'Teriyaki Chicken with Stir-Fried Veggies', 'Homemade Lasagna', 'Balsamic Glazed Chicken with Quinoa',
+      'Honey Garlic Pork Chops with Rice Pilaf', 'Chicken Fajitas with Peppers and Onions', 'BBQ Ribs with Coleslaw',
+      'Baked Ziti with Italian Sausage', 'Grilled Steak with Roasted Potatoes', 'Creamy Tuscan Chicken Pasta',
+      'Crockpot Pot Roast with Carrots and Potatoes', 'Taco Bowls with Rice and Black Beans',
+      'Buffalo Chicken Wraps with Celery and Ranch', 'Baked Chicken Parmesan',
+      'Stuffed Shells with Spinach and Ricotta', 'Honey Mustard Chicken with Roasted Sweet Potatoes', 'Beef and Broccoli Stir Fry',
+      'BBQ Pulled Pork Sandwiches', 'Chicken Alfredo with Broccoli', 'Greek Chicken with Lemon Rice and Cucumber Salad',
+      'Beef Enchiladas with Spanish Rice', 'Chicken Burrito Bowls', 'Cajun Chicken Pasta',
+      'Meatloaf with Mashed Potatoes and Green Beans', 'Grilled Chicken Caesar Wraps', 'Margherita Flatbread Pizza',
+      'Crockpot Chili with Cornbread', 'Baked BBQ Chicken Thighs with Rice', 'Stir Fry Noodle Bowls with Chicken',
+      'Beef Tacos with Fresh Salsa', 'Sheet Pan Chicken and Veggies', 'Chicken Pot Pie with Flaky Crust',
+      'Sausage and Peppers over Rice', 'Spaghetti Carbonara'
+    ];
+
+    const mealContainer = document.getElementById('mealContainer');
+    let favorites = JSON.parse(localStorage.getItem('favorites')) || {};
+
+    function getRandomDinner(exclude = null) {
+      let choice;
+      do {
+        choice = dinners[Math.floor(Math.random() * dinners.length)];
+      } while (choice === exclude);
+      return choice;
+    }
+
+    function generatePlan() {
+      const plan = [];
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      for (let i = 0; i < 7; i++) {
+        plan.push({ day: days[i], dinner: getRandomDinner() });
+      }
+      return plan;
+    }
+
+    function saveFavorites() {
+      localStorage.setItem('favorites', JSON.stringify(favorites));
+    }
+
+    function renderPlan(plan) {
+      mealContainer.innerHTML = '';
+      plan.forEach((day) => {
+        const div = document.createElement('div');
+        div.className = 'meal-day';
+
+        const upActive = favorites[day.dinner] === 'up' ? 'active' : '';
+        const downActive = favorites[day.dinner] === 'down' ? 'active' : '';
+
+        div.innerHTML = `
+          <h3>${day.day}</h3>
+          <p><strong>Dinner:</strong> <span class="meal-name">${day.dinner}</span></p>
+          <div class="rating">
+            <span class="thumb up ${upActive}">👍</span>
+            <span class="thumb down ${downActive}">👎</span>
+            <button class="replace-btn">Replace 🔁</button>
+          </div>
+        `;
+
+        const up = div.querySelector('.thumb.up');
+        const down = div.querySelector('.thumb.down');
+        const replaceBtn = div.querySelector('.replace-btn');
+
+        up.addEventListener('click', () => {
+          favorites[day.dinner] = favorites[day.dinner] === 'up' ? null : 'up';
+          saveFavorites();
+          renderPlan(plan);
+        });
+
+        down.addEventListener('click', () => {
+          favorites[day.dinner] = favorites[day.dinner] === 'down' ? null : 'down';
+          saveFavorites();
+          renderPlan(plan);
+        });
+
+        replaceBtn.addEventListener('click', () => {
+          const newDinner = getRandomDinner(day.dinner);
+          day.dinner = newDinner;
+          localStorage.setItem('familyDinnerPlan', JSON.stringify(plan));
+          renderPlan(plan);
+        });
+
+        mealContainer.appendChild(div);
+      });
+    }
+
+    function loadPlan() {
+      const stored = localStorage.getItem('familyDinnerPlan');
+      if (stored) {
+        renderPlan(JSON.parse(stored));
+      } else {
+        const newPlan = generatePlan();
+        localStorage.setItem('familyDinnerPlan', JSON.stringify(newPlan));
+        renderPlan(newPlan);
+      }
+    }
+
+    document.getElementById('newPlan').addEventListener('click', () => {
+      const newPlan = generatePlan();
+      localStorage.setItem('familyDinnerPlan', JSON.stringify(newPlan));
+      renderPlan(newPlan);
+    });
+
+    loadPlan();
+  </script>
+</body>
+</html>
